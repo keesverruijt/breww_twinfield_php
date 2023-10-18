@@ -12,12 +12,18 @@ if (str_starts_with($_SERVER['REQUEST_URI'], '/url?'))
     $url = $query['new'];
     $salt = generateSalt(12);
 
-    $sth = $db->prepare('insert into url (salt, url) values (?, ?)');
-    $r = $sth->execute(array($salt, $url));
-    if (!$r)
-    {
+    try {
+      $sth = $db->prepare('insert into url (salt, url) values (?, ?)');
+      $r = $sth->execute(array($salt, $url));
+      if (!$r)
+      {
+	http_response_code(501);
+	echo $db->errorInfo();
+	return;
+      }
+    } catch (Exception $e) {
       http_response_code(501);
-      echo $db->errorInfo();
+      echo $e->getMessage();
       return;
     }
 
