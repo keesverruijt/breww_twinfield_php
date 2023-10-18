@@ -65,6 +65,9 @@ catch (Exception $e) {
   }
   $log->info('The configuration file should contain the following:');
   $log->info('');
+  $log->info('[settings]');
+  $log->info('  url          = "<where-this-is-running>"');
+  $log->info('');
   $log->info('[twinfield]');
   $log->info('  clientId     = "<application_id>"');
   $log->info('  clientSecret = "<application_secret>"');
@@ -85,6 +88,11 @@ $BREWW_CLIENT = new Client([
   'timeout'  => 30.0,
 ]);
 
+$URL_CLIENT = new Client([
+  'base_uri' => $config['settings']['url'],
+  'timeout'  => 30.0,
+]);
+
 function breww_get($endpoint)
 {
   global $BREWW_CLIENT, $breww_token;
@@ -92,7 +100,7 @@ function breww_get($endpoint)
   $response = $BREWW_CLIENT->get($endpoint, [
     'headers' => [ 'Authorization' => "Bearer $breww_token" ]
   ]);
-  
+
   if ($response->getStatusCode() != 200) {
     $log->error('[' . $endpoint . ']: ' . $response->getStatusCode());
     throw new Exception('Brew responded with error ' .  $response->getStatusCode());
@@ -104,6 +112,22 @@ function breww_get($endpoint)
 function EUR($value) : \Money\Money
 {
   return \Money\Money::EUR(intval($value * 100));
+}
+
+function get_short_url($url)
+{
+  global $log;
+  global $URL_CLIENT;
+
+  $response = $URL_CLIENT->get('url?new=' . $url);
+
+  if ($response->getStatusCode() != 200) {
+    $log->error($response->getBody());
+    throw new Exception('Our URL shortener responded with error ' .  $response->getStatusCode());
+  }
+  $short = $response->getBody();
+  $log->debug("URL $url shortened to $short");
+  return $short;
 }
 
 /**
@@ -396,7 +420,7 @@ foreach ($orders->results as $order) {
   $tf_sale->setDueDate(date_create_immutable_from_format('Y-m-d', $order->due_date));
   $tf_sale->setDate(date_create_immutable_from_format('Y-m-d', $order->issue_date));
   $tf_sale->setAutoBalanceVat(true);
-  $tf_sale->setFreeText3($order->pdf_url);
+  $tf_sale->setFreeText3(get_short_url($order->pdf_url));
 
   $vatTotals = array();
 
