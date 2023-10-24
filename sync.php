@@ -79,7 +79,9 @@ catch (Exception $e) {
   $log->info('  vatCodes     = { "0.00" = "VN", "0.09" = "VL", "0.21" = "VH" }');
   $log->info('');
   $log->info('[breww]');
-  $log->info('  token        = "<breww_application_token>"');
+  $log->info('  token           = "<breww_application_token>"');
+  $log->info('  dimension_regex = "GBTF-(\d{4})(-|$)"');
+  $log->info('  dimension_group = "1"');
   exit(1);
 }
 
@@ -245,12 +247,15 @@ function create_customer($connection, $order)
 {
   global $log;
   global $twinfield_config;
+  global $customer_lookup;
 
   $customer = breww_get('customers-suppliers/' . $order->customer->id . '/');
 
   $log->info('Creating customer ' . $order->customer->name);
   $log->debug(print_r($customer, true));
-  exit(1);
+
+  $customer_lookup[$order->customer->name] = 0;
+  # exit(1);
 }
 
 /*
@@ -281,7 +286,6 @@ function create_customer_lookup($customerFactory) : array
     }
   }
   $log->info('There are ' . count($customer_lookup) . ' customers in office ' . $office->getCode());
-  print_r($customer_lookup);
   return $customer_lookup;
 }
 
@@ -291,6 +295,13 @@ function get_customer_code($customerFactory, &$customer_lookup, $order)
   global $office;
 
   $name = $order->customer->name;
+
+  if (!array_key_exists($name, $customer_lookup)) {
+    // $log->notice('New customer ' . $name);
+    // create_customer($connection, $order);
+    throw new Exception("Customer '$name' does not exist in TwinField");
+  }
+
   $val = $customer_lookup[$name];
 
   if (is_array($val)) {
@@ -322,6 +333,57 @@ function get_customer_code($customerFactory, &$customer_lookup, $order)
   }
 
   return $val;
+}
+
+$breww_product_dimensions = array();
+
+/**
+ * Retrieve the Twinfield dimension that needs to be set
+ * on the sales transaction. 
+ *
+ * We do this by retrieving the tags on the Breww product sold,
+ * then filtering by regex and extracting one group from the
+ * regex. If this results in an empty string, refuse it.
+ */
+function get_dimension($connection, $item)
+{
+  global $log;
+  global $breww_product_dimensions;
+  global $config;
+
+
+  if (array_key_exists($item->product, $breww_product_dimensions)) {
+    return $breww_product_dimensions[$item->product];
+  }
+
+  $regex = $config['breww']['dimension_regex'];
+  $group = $config['breww']['dimension_group'];
+
+  if (empty($regex)) {
+    $log->error("Please set 'dimension_regex' in config file under 'breww'.");
+    exit(1);
+  }
+  if (empty($group)) {
+    $log->error("Please set 'dimension_group' in config file under 'breww'.");
+    exit(1);
+  }
+
+  $product = breww_get('products/' . $item->product . '/');
+  $tags = '';
+  foreach ($product->tags as $tag) {
+    $output_array = array();
+    if (preg_match('/' . $regex . '/', $tag->name, $output_array)) {
+      if (!empty($output_array[$group])) {
+        $log->info("Dimension for product $item->product '$item->product_name' is $output_array[$group]");
+        $breww_product_dimensions[$item->product] = $output_array[$group];
+        return $output_array[$group];
+      }
+    }
+    $tags = $tags . ', ' . $tag->name;
+  }
+
+  $tags = substr($tags, 2);
+  throw new Exception("Product '$item->product_name' No tag matching regex $regex found in tags: $tags");
 }
 
 $twinfield_config = $config['twinfield'];
@@ -366,9 +428,6 @@ if ($getOpt->getOption('customers')) {
 
 $log->info('Starting sync');
 
-$orders = breww_get('orders/');
-$log->info(('There are ' . strval($orders->count) . ' confirmed orders in Breww'));
-
 $transactionFactory = new \PhpTwinfield\ApiConnectors\TransactionApiConnector($connection);
 
 $vatCodeFactory = new \PhpTwinfield\ApiConnectors\VatCodeApiConnector($connection);
@@ -376,117 +435,110 @@ $vatCodes = $vatCodeFactory->listAll();
 $vatCodeLookup = $twinfield_config['vatCodes'];
 $customer_lookup = create_customer_lookup($customerFactory);
 
-foreach ($orders->results as $order) {
-  if ($order->order_status == 'Invoiced') {
-    continue;
-  }
-
-  $log->debug(print_r($order, true));
-  $order_nr = 'BREWW_KEES1_' . strval($order->number);
-  if (!array_key_exists($order->customer->name, $customer_lookup)) {
-    $log->notice('New customer ' . $order->customer->name);
-    create_customer($connection, $order);
-  }
-  else {
-    $log->debug('Existing customer ' . $order->customer->name);
-  }
-
-  // Check if this is an update of an existing sales transaction.
-  list ($tx_id, $old_value) = get_existing_transaction($connection, $order_nr);
-  if ($old_value === $order->total)
-  {
-    $log->info("Skip existing transaction " . $order_nr . " -> $tx_id @ $old_value");
-    continue;
-  }
-
-  $tf_customer = new \PhpTwinfield\Customer();
-  $customer_code = get_customer_code($customerFactory, $customer_lookup, $order);
-  $tf_customer->setCode($customer_code);
-  $tf_customer->setOffice($office);
-
-  $tf_sale = new \PhpTwinfield\SalesTransaction();
-  if ($tx_id !== null) {
-    $log->info("Updating transaction " . $order_nr . "-> $tx_id from EUR $old_value to " . $order->total);
-    $tf_sale->setNumber($tx_id);
-  }
-  else {
-    $log->info('Processing order ' . $order_nr . ' with status ' . $order->order_status . ' due date ' . $order->due_date);
-  }
-  $tf_sale->setInvoiceNumber($order_nr);
-  $tf_sale->setOffice($office);
-  $tf_sale->setCode($twinfield_config['salesCode']);
-  $tf_sale->setDestiny(\PhpTwinfield\Enums\Destiny::TEMPORARY());
-  $tf_sale->setRaiseWarning(false);
-  $tf_sale->setDueDate(date_create_immutable_from_format('Y-m-d', $order->due_date));
-  $tf_sale->setDate(date_create_immutable_from_format('Y-m-d', $order->issue_date));
-  $tf_sale->setAutoBalanceVat(true);
-  $tf_sale->setFreeText3(get_short_url($order->pdf_url));
-
-  $vatTotals = array();
-
-  $id = 1;
-
-  // Twinfield TOTAL line
-  $tf_sales_line = new \PhpTwinfield\SalesTransactionLine();
-  $tf_sales_line->setLineType(\PhpTwinfield\Enums\LineType::TOTAL());
-  $tf_sales_line->setId($id);
-  $id = $id + 1;
-  $tf_sales_line->setDim1('1300'); // TODO ' accounts receivable balance account.' 
-  $tf_sales_line->setDim2($customer_code);
-  $tf_sales_line->setValue(EUR($order->total));
-  $tf_sale->addLine($tf_sales_line);
-  /*
-                    [quantity] => 3
-                    [requires_delivery] => 1
-                    [shown_on_invoice] => 1
-                    [tax_rate_decimal] => 0.21
-                    [total_amount] => 111.16
-                    [total_discount_percentage] => 0
-                    [total_discount_value] => 0
-                    [value] => 91.87
-                    [vat] => 19.29
-                )
-   */
-
-  // Twinfield DETAIL lines
-  foreach ($order->order_lines as $item) {
-    $log->debug($item->product_name . ' @ ' . $item->quantity . ' * ' . $item->product_original_unit_value);
-
-    $tf_sales_line = new \PhpTwinfield\SalesTransactionLine();
-    $tf_sales_line->setLineType(\PhpTwinfield\Enums\LineType::DETAIL());
-    $tf_sales_line->setId($id);
-    $id = $id + 1;
-    $tf_sales_line->setDim1('8000'); // TODO make config
-    $tf_sales_line->setValue(EUR($item->value));
-
-    if (!array_key_exists(strval($item->tax_rate_decimal), $vatCodeLookup))
-    {
-      $log->error("Do not know how to handle VAT rate $item->tax_rate_decimal");
-      exit(2);
+$orders = breww_get('orders/');
+$log->info(('There are ' . strval($orders->count) . ' confirmed orders in Breww'));
+while (true) {
+  foreach ($orders->results as $order) {
+    if ($order->order_status == 'Invoiced') {
+      continue;
     }
-    $vatCode = $vatCodeLookup[strval($item->tax_rate_decimal)];
-    $tf_sales_line->setVatCode($vatCode);
-    if (!array_key_exists($vatCode, $vatTotals)) {
-      $vatTotals[$vatCode] = [0.0, 0,0];
+
+    $log->debug(print_r($order, true));
+    $order_nr = 'BREWW_KEES1_' . strval($order->number);
+
+    try {
+
+      // Check if this is an update of an existing sales transaction.
+      list ($tx_id, $old_value) = get_existing_transaction($connection, $order_nr);
+      if ($old_value === $order->total)
+      {
+        $log->info("Skip existing transaction " . $order_nr . " -> $tx_id @ $old_value");
+        continue;
+      }
+
+      $tf_sale = new \PhpTwinfield\SalesTransaction();
+      if ($tx_id !== null) {
+        $log->info("Updating transaction " . $order_nr . "-> $tx_id from EUR $old_value to " . $order->total);
+        $tf_sale->setNumber($tx_id);
+      }
+      else {
+        $log->info('Processing transaction ' . $order_nr . ' with status ' . $order->order_status . ' due date ' . $order->due_date);
+      }
+
+      $tf_customer = new \PhpTwinfield\Customer();
+      $customer_code = get_customer_code($customerFactory, $customer_lookup, $order);
+      $tf_customer->setCode($customer_code);
+      $tf_customer->setOffice($office);
+
+      $tf_sale->setInvoiceNumber($order_nr);
+      $tf_sale->setOffice($office);
+      $tf_sale->setCode($twinfield_config['salesCode']);
+      $tf_sale->setDestiny(\PhpTwinfield\Enums\Destiny::TEMPORARY());
+      $tf_sale->setRaiseWarning(false);
+      $tf_sale->setDueDate(date_create_immutable_from_format('Y-m-d', $order->due_date));
+      $tf_sale->setDate(date_create_immutable_from_format('Y-m-d', $order->issue_date));
+      $tf_sale->setAutoBalanceVat(true);
+      $tf_sale->setFreeText3(get_short_url($order->pdf_url));
+
+      $id = 1;
+
+      // Twinfield TOTAL line
+      $tf_sales_line = new \PhpTwinfield\SalesTransactionLine();
+      $tf_sales_line->setLineType(\PhpTwinfield\Enums\LineType::TOTAL());
+      $tf_sales_line->setId($id);
+      $id = $id + 1;
+      $tf_sales_line->setDim1('1300'); // TODO ' accounts receivable balance account.' 
+      $tf_sales_line->setDim2($customer_code);
+      $tf_sales_line->setValue(EUR($order->total));
+      $tf_sale->addLine($tf_sales_line);
+      /*
+                        [quantity] => 3
+                        [requires_delivery] => 1
+                        [shown_on_invoice] => 1
+                        [tax_rate_decimal] => 0.21
+                        [total_amount] => 111.16
+                        [total_discount_percentage] => 0
+                        [total_discount_value] => 0
+                        [value] => 91.87
+                        [vat] => 19.29
+                    )
+       */
+
+      // Twinfield DETAIL lines
+      foreach ($order->order_lines as $item) {
+        $log->debug($item->product_name . ' @ ' . $item->quantity . ' * ' . $item->product_original_unit_value);
+
+        $tf_sales_line = new \PhpTwinfield\SalesTransactionLine();
+        $tf_sales_line->setLineType(\PhpTwinfield\Enums\LineType::DETAIL());
+        $tf_sales_line->setId($id);
+        $id = $id + 1;
+        $tf_sales_line->setDim1(get_dimension($connection, $item));
+        $tf_sales_line->setValue(EUR($item->value));
+
+        if (!array_key_exists(strval($item->tax_rate_decimal), $vatCodeLookup))
+        {
+          $log->error("Do not know how to handle VAT rate $item->tax_rate_decimal");
+          exit(2);
+        }
+        $vatCode = $vatCodeLookup[strval($item->tax_rate_decimal)];
+        $tf_sales_line->setVatCode($vatCode);
+
+        $tf_sale->addLine($tf_sales_line);
+      }
+
+      $result = $transactionFactory->send($tf_sale);
+      $log->debug(print_r($result, true));
+    } catch (Exception $e) {
+      $log->error($e->getMessage());
+      $log->error("Skipping transaction $order_nr because of above error");
     }
-    $vatTotals[$vatCode] = [$vatTotals[$vatCode][0] + $item->value, $vatTotals[$vatCode][1] + $item->vat];
-
-    $tf_sale->addLine($tf_sales_line);
   }
 
-  /*
-  // Twinfield VAT lines
-  foreach($vatTotals as $item) {
-    $tf_sales_line = new \PhpTwinfield\SalesTransactionLine();
-    $tf_sales_line->setLineType(\PhpTwinfield\Enums\LineType::VAT());
-    $tf_sales_line->setVatTurnover(EUR($item[0]));
-    $tf_sales_line->setValue(EUR($item[1]));
-    $tf_sale->addLine($tf_sales_line);
+  if (empty($orders->next)) {
+    break;
   }
-   */
-
-  $result = $transactionFactory->send($tf_sale);
-  $log->debug(print_r($result, true));
+  $orders = breww_get($orders->next);
+  $log->info(('There are ' . strval($orders->count) . ' more confirmed orders in Breww'));
 }
 
 $log->info('Done');
