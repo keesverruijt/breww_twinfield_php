@@ -20,7 +20,7 @@ that is set in the config file (default: VRK, Sales transaction).
 Under __Free text fields__ set __Free text field 3__ to:
 
 | Field      |  Value             |
-|============|====================|
+|------------|--------------------|
 | Usage      |  Allowed           |
 | Location   |  Header            |
 | Total name |  Breww short link  |
@@ -29,7 +29,7 @@ Under __Free text fields__ set __Free text field 3__ to:
 and __Document imaging__ to:
 
 | Field      |  Value                                    |
-|============|===========================================|
+|------------|-------------------------------------------|
 | Name       |  Breww Invoice                            |
 | Link       |  https://<yourdomain.com>/url/$FreeText3$ |
 
