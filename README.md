@@ -24,7 +24,7 @@ Next, you need to create a webserver so this code is online via the internet. Se
 You will need to apply as a developer and create a developer 'product'. See the (twinfield_setup/) directory.
 
 You will also need to tell Twinfield that the API will send a free text field and that this needs to be interpreted
-as a link to the Breww invoice. To do that read (INVOICE.md).
+as a link to the Breww invoice. To do that read [INVOICE.md](INVOICE.md).
 
 ## Usage
 
