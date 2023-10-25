@@ -19,14 +19,14 @@ that is set in the config file (default: VRK, Sales transaction).
 
 Under __Free text fields__ set __Free text field 3__ to:
 
-   Usage      |  Allowed
-   Location   |  Header
-   Total name |  Breww short link
-   Total type |  Text
+| Usage      |  Allowed           |
+| Location   |  Header            |
+| Total name |  Breww short link  |
+| Total type |  Text              |
 
 and __Document imaging__ to:
 
-   Name       |  Breww Invoice
-   Link       |  https://<yourdomain.com>/url/$FreeText3$
+| Name       |  Breww Invoice                            |
+| Link       |  https://<yourdomain.com>/url/$FreeText3$ |
 
 where the url matches where you have this code running. 
