@@ -19,6 +19,13 @@ which will fill the `vendor/` subdirectory with the dependencies.
 
 Next, you need to create a webserver so this code is online via the internet. See `nginx.conf.example` for an example server for this.
 
+## Preparing Twinfield
+
+You will need to apply as a developer and create a developer 'product'. See the (twinfield_setup/) directory.
+
+You will also need to tell Twinfield that the API will send a free text field and that this needs to be interpreted
+as a link to the Breww invoice. To do that read (INVOICE.md).
+
 ## Usage
 
 Note that the day-to-day code lives in the repo's top directory. It can be used to run from the CLI, running `sync.php` regularly. To use this, the repo has to be live on the internet somewhere as it uses its own URL shortener (public versions either charge money or limit use). The URL shortener is used to generate URLs shorter than 40 characters (a Twinfield restriction). When you have it live you can also access `synchronize.php` from a browser.
