@@ -1,0 +1,29 @@
+
+server {
+    # Host and SSL settings skipped, add these yourself
+
+    root <path/to/breww_twinfield_php>;
+
+    index index.php;
+
+    location /url {
+        # Note, no auth 
+	try_files /index.php;
+    }
+
+    location / {
+        auth_basic           "<Auth domain>";
+        auth_basic_user_file "htpasswd";
+	try_files            $uri $uri/ /index.php;
+    }
+
+    location ~* \.php$ {
+        fastcgi_pass	php_host:9000;
+	include		fastcgi_params;
+	fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+    
+    location ~ /\. {
+       	deny all;
+    }
+}
