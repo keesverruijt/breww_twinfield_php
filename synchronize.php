@@ -12,6 +12,9 @@ $getOpt = new \GetOpt\GetOpt([]);
 $getOpt->process();
 
 $level = Level::Info;
+if (array_key_exists('debug', $_REQUEST)) {
+  $level = Level::Debug;
+}
 
 ob_start();
 

@@ -1,5 +1,6 @@
 <?php
 
+require __DIR__ . '/functions.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 use Monolog\Level;
@@ -8,7 +9,7 @@ use GuzzleHttp\Client;
 
 $config_file = $_SERVER['DOCUMENT_ROOT'] . '/.breww_twinfield_php.toml';
 try {
-  $config = \Yosymfony\Toml\Toml::ParseFile($config_file);
+  $config = get_config($config_file);
 } 
 catch (Exception $e) {
   $log->info('The configuration file should contain the following:');
