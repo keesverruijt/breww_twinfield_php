@@ -1,15 +1,13 @@
 <?php
 
-require __DIR__ . '/functions.inc';
-require __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/functions.inc';
 
 use Monolog\Level;
 use Monolog\Logger;
 use GuzzleHttp\Client;
 
-$config_file = $_SERVER['DOCUMENT_ROOT'] . '/.breww_twinfield_php.toml';
 try {
-  $config = get_config($config_file);
+  $config = get_config();
 } 
 catch (Exception $e) {
   $log->info('The configuration file should contain the following:');

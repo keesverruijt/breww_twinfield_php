@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/vendor/autoload.php';
+
 function generateSalt($length = 10) {
   $chars='1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM';
   $char_len = strlen($chars)-1;
@@ -65,8 +67,11 @@ function get_config_str() : string {
     . "  dimension_group = \"1\"\n";
 }
 
-function get_config($config_file)
+$config_file = $_SERVER['DOCUMENT_ROOT'] . '/.breww_twinfield_php.toml';
+function get_config()
 {
+  global $config_file;
+
   try {
     if (!file_exists($config_file)) {
       throw new Exception("There is no config file $config_file");

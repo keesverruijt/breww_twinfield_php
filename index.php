@@ -82,8 +82,21 @@ else if (str_starts_with($_SERVER['REQUEST_URI'], '/url/'))
 <html>
 <body>
 
-<a href="synchronize.php">Synchronize transactions</a>
+<?php
+try {
+  $config = get_config();
+?>
+<button>
+  <a href="synchronize.php">Synchronize transactions</a>
+</button>
+<?php
+}
+catch (Exception $e) {
+?>
 <a href="twinfield/index.php">Set-up link to Twinfield</a>
+<?php
+}
+?>
 
 </body>
 </html>
