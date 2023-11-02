@@ -1,5 +1,7 @@
 <?php
 
+echo 'poep';
+
 if (str_starts_with($_SERVER['REQUEST_URI'], '/url?'))
 {
   include 'salt.inc';
@@ -53,14 +55,10 @@ else if (str_starts_with($_SERVER['REQUEST_URI'], '/url/'))
 
 <html>
 <body>
-<pre>
 
-<?php
-  var_dump($_REQUEST);
-  var_dump($_SERVER);
-?>
+<a href="synchronize.php">Synchronize transactions</a>
+<a href="twinfield/index.php">Set-up link to Twinfield</a>
 
-</pre>
 </body>
 </html>
 
